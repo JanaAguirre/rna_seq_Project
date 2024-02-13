@@ -47,18 +47,16 @@ rse_jana$assigned_gene_prop <- rse_jana$recount_qc.gene_fc_count_all.assigned / 
 summary(rse_jana$assigned_gene_prop)
 
 # Evaluando las muestras con la variable assigned_gene_prop
-attributes <- colnames(colData(rse_jana))[grepl("^sra_attribute.[cell_type|day|source_name]",colnames(colData(rse_jana)))]
-library(ggplot2)
+
 hist(rse_jana$assigned_gene_prop)
-data <- rse_jana$assigned_gene_prop
 
 # Analizando cuantas muestras tienen una proporciones de genes menor a 0.4
 table(rse_jana$assigned_gene_prop < 0.4)
 
 #Evaluando la expresión de los genes
 gene_means <- rowMeans(assay(rse_jana,"raw_counts"))
-summary(gene_means)
-rse_jana <- rse_jana [gene_means> 0.1, ] # Quedan 19708 genes después del filtrado
+rse_jana <- rse_jana [gene_means> 0.1, ]
+summary(gene_means) # Quedan 19708 genes después del filtrado
 
 #Visualizando las medias de expresión
 temp <- gene_means
@@ -89,12 +87,12 @@ cowplot::plot_grid(plotlist = vd$plotlist)
 colnames(mod)
 
 # Utilizando el modelo estadístico creado anteriormente y los datos de los genes
-# de dge se crea un voom plot
+# de dge para crear un voom plot
 
 library("limma")
 vGene <- voom(dge, mod, plot = TRUE)
 
-# Calculos bayesianos
+# Cálculos bayesianos
 
 eb_results <- eBayes(lmFit(vGene))
 
@@ -110,7 +108,8 @@ head(de_results)
 
 # Análisis de parámetros estadísticos
 
-table(de_results$adj.P.Val > 0.05)
+table(de_results$adj.P.Val < 0.05)
+ruta <- "C:/Users/Acer/Documents/ibt_ccg/Bioinfo2/RNA-seq/de_RESULTS_padjustvalue.txt"
 write.table(de_results$adj.P.Val, file=ruta, row.names = TRUE)
 
 #Más visualizaciones
@@ -131,15 +130,7 @@ for (i in 2:5) {
   dev.off()
 }
 
-#Heatmap en iSSEE
 
-## Extraer valores de los genes de interés
-
-exprs_heatmap <- vGene$E[rank(de_results$adj.P.Val) <= 50, ]
-df <- as.matrix(exprs_heatmap)
-
-heatmap(exprs_heatmap)
-iSEE(rse_jana)
 
 # Extras
 library("ggplot2")

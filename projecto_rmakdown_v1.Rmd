@@ -2,7 +2,9 @@
 title: "Reporte_proyecto"
 author: "Jana A. Castañeda"
 date: "2024-02-13"
-output: html_document
+output:
+  html_document: default
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -104,12 +106,126 @@ summary(rse_jana$assigned_gene_prop)
 
 hist(rse_jana$assigned_gene_prop)
 ```
-## Including Plots
+```{r}
+table(rse_jana$assigned_gene_prop < 0.4)
+```
+La cantidad de muestras es muy pequeña (n=9), de ahí que las frecuencias del histograma no sobrepasan 3. Por otro lado, podemos observar que practicamente a la mitad de las muestras no se les asignó un alto porcentage de los genes totales detectados. Y dado que todos los organoides deberían tener un background genético y de expresión muy similar, podemos asumir que estas 4 muestras podrían no haber tenido la mejor calidad. Sin embargo, dado la n de la muestra y a que no hay replicas para practicamente ningún tipo de organoide se mantendrán las muestras con discresión.  
 
-You can also embed plots, for example:
+### 4.1 Filtrado de los genes
+Dado que hay una gran cantidad de genes cuya expresión es 0 y alterarían los análisis estadísticos se filtran.
+```{r}
+#Evaluando la expresión de los genes
+gene_means <- rowMeans(assay(rse_jana,"raw_counts"))
+rse_jana <- rse_jana [gene_means> 0.1, ] 
+summary(gene_means) # Quedan 19708 genes después del filtrado
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+#Visualizando las medias de expresión
+temp <- gene_means
+temp <- as.matrix(temp)
+View(temp)
+```
+# 5. Normalización de datos
+
+Para reducir la incidencia de falsos positivos normalizaremos los datos asumiendo que la mayoría de los genes no se están expresando diferencialmente.
+```{r}
+library("edgeR")
+# Crear un objeto de tipo DGElista, extrayendo todos los metadatos de los genes
+dge <- DGEList(
+  counts = assay(rse_jana, "raw_counts"),
+  genes = rowData(rse_jana)
+)
+# Calcula los factores de normalización para cada una de las muestras
+dge <- calcNormFactors(dge)
+``` 
+# 6. Expresión diferencial
+# 6.1 Modelo estadístico
+Para este estudio los atributos que se generaron consistían solo de columnas categóricas en donde se mencionaba el tipo de organoide y en algunos casos se registraron días durante los que se dejaron crecer. Por lo tanto, en este modelo estadístico se plantea que "Y" solo depende de sra_attribute.cell_type. 
+```{r}
+# Modelo estadístico
+
+mod <- model.matrix(~ sra_attribute.cell_type,
+                    data= colData(rse_jana)
+)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+El modelo queda más claro al visualizarlo.
+```{r echo=FALSE}
+#Visualización del modelo
+library(ExploreModelMatrix)
+vd <- VisualizeDesign(sampleData = colData(rse_jana),
+                      designFormula = ~ sra_attribute.cell_type,
+                      textSizeFitted = 4)
+cowplot::plot_grid(plotlist = vd$plotlist)
+```
+
+Aquí podemos observar que la variable de referencia son las muestras de hepatocitos, normales. Por lo que el modelo queda como el coeficiente de las muestras de hepatocitos - el coeficiente de alguno de los grupos de organoides evaluados. 
+
+```{r}
+#Visualizando las columnas del modelo 
+colnames(mod)
+```
+Utilizando el modelo estadístico creado anteriormente y los features de los genes contenidos en la variable dge se crea un voom plot.
+```{r}
+
+library("limma")
+vGene <- voom(dge, mod, plot = TRUE)
+
+```
+La desviación estándar de las muestras que tuvieron log2 mayores a 5 es grande, por esta razón en lugar de observar una decaída de la función como de costumbra se ve una línea ascendente. Sin embargo, la primera sección de los genes tienen el comportamiento de "J" esperado. 
+
+# 7 Otras visualizaciones 
+## plotMAs
+Se generan plotMAs para cada uno de los cell.types para ver cómo se comporta el log-fold-change en cada grupo función del average-log-expression. Dado que en el archivo de_results es a partir de la 2 columna en donde se encuentran las cuentas de los cell types que se buscan evaluar se crean gráficos a partir de esta columna. 
+
+```{r}
+# Generar los plotMA para cada uno de los modelos celulares evaluados
+#for (i in 2:5) {
+# Generar el plotMA y guardarlo como una imagen en la carpeta "plots"
+# png(paste0("figuras/plot_", i, ".png"))
+# plotMA(eb_results, coef=i)
+#3dev.off()}
+```
+
+## volcanoplots
+Con la misma lógica se pueden generar los volcanoplots para cada uno de los grupos. 
+```{r}
+# Generar los volcanoplots para cada uno de los modelos celulares evaluados
+#for (i in 2:5) {
+  # Generar el plotMA y guardarlo como una imagen en la carpeta "plots"
+  #png(paste0("figuras/volcanoplot_", i, ".png"))
+  #volcanoplot(eb_results, coef= i, highlight = 3, names = de_results$gene_name)
+  #dev.off()}
+``` 
+
+
+# 8. Evaluación estadística 
+Para obtener los valores de pvalue así como otros parámetros estadísticos de intéres, se utilizó la función ```eBayes```.
+
+```{r}
+# Cálculos bayesianos
+
+eb_results <- eBayes(lmFit(vGene))
+
+# Tabla con los resultados top de eb_results
+de_results <- topTable(
+  eb_results,
+  number = nrow(rse_jana),
+  sort.by = "none"
+)
+
+dim(de_results)
+```
+Para que cada uno de nuestros "cell types" aparezcan en el "de_results" no específicamos el coeficiente. Con estos nuevos datos sobre la expresión diferencial del modelo, se puede evaluar cuantos de los genes tuvieron un pvalue menor a 0.05.
+```{r}
+# Análisis de parámetros estadísticos
+
+table(de_results$adj.P.Val < 0.05)
+# Opcionalmente se puede generar un archivo con esta información
+ruta <- "C:/Users/Acer/Documents/ibt_ccg/Bioinfo2/RNA-seq/de_RESULTS_padjustvalue.txt"
+write.table(de_results$adj.P.Val, file=ruta, row.names = TRUE)
+
+```
+Esta parte resulta interesante, dado que es convención pensar en la necesidad de pvalues menores a 0.05 para tener resultados estadísticos correctos y confiables. Sin embargo, en este estudio en particular se debe hacer notar que todos los organoides derivaban de un mismo paciente y el objetivo del desarrollo de este tipo de modelos de cultivo tridimensionales es reflejar el contexto transcriptómico, metabólico y de señalización del paciente de origen. Un pvalue menor a 0.05 indicaría que hay una probabilidad muy baja de que las medias entre los dos grupos sean iguales, pero en este contexto sí se esperan que sean iguales. Por lo tanto, los valores de pvalue elevados nos hablan de un buen reflejo transcriptómico de los modelos.  
+## Conclusiones
+
+El dataset con ID SRP113338 no solo da paso a la evaluación de los genes con expresión diferencial entre cada uno de los organoides generados (iPSCs, primary hepatic organoids, secondary hepatic organoids, primary hepatocytes), si no también ha permitido evidenciar lo robusto del método de modelado. Para evaluar los genes que tienen expresión particular en cada uno de estos grupos en estudios futuros, se propone utilizar a los 50 genes con log-fold-change más grandes o más bajos en vez de utilizar los valores de pvalue.
