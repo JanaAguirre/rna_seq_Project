@@ -9,8 +9,9 @@ rse_jana <- create_rse( subset(human_projects, project== "SRP113338" & project_t
 assay(rse_jana, "raw_counts") <- compute_read_counts(rse_jana)
 
 # Obteniendo más información de las muestras
-rse_jana <- expand_sra_attributes(rse_jana) #Este comando no resulta por lo que se modifica la estructura de los atributos de la muestra
 rse_jana$sra.sample_attributes[1:3]
+rse_jana <- expand_sra_attributes(rse_jana) #Este comando no resulta por lo que se modifica la estructura de los atributos de la muestra
+
 
 # Se genera un archivo con los atributos de las muestras para evaluar el problema
 namee <- "C:/Users/Acer/Documents/ibt_ccg/Bioinfo2/RNA-seq/colData_info_rseSRP113338.txt"
