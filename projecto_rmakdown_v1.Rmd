@@ -10,7 +10,7 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-# Proyecto RNA-seq 2022
+# Proyecto RNA-seq 2024
 ### Jana Carolina Aguirre Castañeda.
  12 - febrero - 2024
 
